@@ -2,44 +2,22 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>Localizador Completo com GPS</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Localizador GPS Calibrado</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
   <style>
-    * {
-      box-sizing: border-box;
-    }
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: #f4f6f9;
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
       margin: 0;
-      padding: 0;
-      color: #333;
+      text-align: center;
     }
     header {
-      background-color: #003366;
+      background: #003366;
       color: white;
-      padding: 16px;
-      text-align: center;
-      font-size: 22px;
-    }
-    main {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
-    }
-    form {
-      margin-bottom: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-    }
-    input {
-      padding: 6px;
-      font-size: 16px;
-      width: 220px;
+      padding: 14px;
+      font-size: 20px;
     }
     #mapa {
       position: relative;
@@ -49,65 +27,74 @@
       background-size: contain;
       background-repeat: no-repeat;
       background-position: center;
-      border: 3px solid #003366;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      border-radius: 10px;
+      border: 2px solid #003366;
+      border-radius: 8px;
+      margin: 20px auto;
     }
     .ponto {
       position: absolute;
-      width: 16px;
-      height: 16px;
-      background-color: red;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       border: 2px solid white;
       transform: translate(-50%, -50%);
     }
-    #gps-ponto {
-      background-color: blue;
-    }
-    #dinamico-ponto {
-      background-color: green;
-    }
+    #gps { background-color: blue; }
+    #manual { background-color: green; }
     #coordenadas-info {
-      margin-top: 16px;
-      font-weight: bold;
+      margin: 10px auto;
       font-size: 16px;
-      background: #eef7ff;
+      font-weight: bold;
+      background: #e1f0ff;
       padding: 10px;
-      border: 1px solid #c2e0ff;
       border-radius: 6px;
+      border: 1px solid #b3d4fc;
+      max-width: 600px;
+    }
+    form {
+      margin-top: 20px;
+    }
+    input {
+      padding: 6px;
+      font-size: 16px;
+      width: 200px;
+      margin: 4px;
     }
   </style>
 </head>
 <body>
-  <header>Localizador de Ensaios - GPS, Entrada e Clique</header>
-  <main>
-    <form oninput="atualizarPontoManual()">
-      <label for="norte">NORTE:</label>
-      <input type="number" id="norte" value="7795763.78" step="0.01">
-      <label for="este">ESTE:</label>
-      <input type="number" id="este" value="686811.84" step="0.01">
-    </form>
+  <header>Localizador GPS Calibrado (Proj4JS)</header>
 
-    <div id="mapa" onclick="exibirCoordenadas(event)">
-      
-      <div id="gps-ponto" class="ponto" title="Sua Localização"></div>
-      <div id="dinamico-ponto" class="ponto" title="Entrada Manual / Clique"></div>
-    </div>
+  <form oninput="atualizarManual()">
+    <label>NORTE:</label><br />
+    <input type="number" id="norte" step="0.01" value="7795763.78"><br />
+    <label>ESTE:</label><br />
+    <input type="number" id="este" step="0.01" value="686811.84">
+  </form>
 
-    <div id="coordenadas-info">Clique no croqui ou digite coordenadas para ver o ponto</div>
-  </main>
+  <div id="mapa" onclick="coordenadaClique(event)">
+    
+    <div id="gps" class="ponto" title="GPS Atual"></div>
+    <div id="manual" class="ponto" title="Entrada Manual / Clique"></div>
+  </div>
+
+  <div id="coordenadas-info">Aguardando dados...</div>
 
   <script>
-    const gpsPonto = document.getElementById("gps-ponto");
-    const dinamicoPonto = document.getElementById("dinamico-ponto");
-    const coordsInfo = document.getElementById("coordenadas-info");
+    const gpsPonto = document.getElementById("gps");
+    const manualPonto = document.getElementById("manual");
+    const info = document.getElementById("coordenadas-info");
 
     const norteMin = 7795165.61, norteMax = 7795965.61;
     const esteMin = 686623.45, esteMax = 687223.45;
     const mapaWidth = 800, mapaHeight = 1067;
 
-    function posicionarElemento(elem, norte, este) {
+    proj4.defs([
+      ['WGS84', '+proj=longlat +datum=WGS84 +no_defs'],
+      ['UTM', '+proj=utm +zone=23 +south +datum=WGS84 +units=m +no_defs']
+    ]);
+
+    function posicionar(elem, norte, este) {
       const xPercent = (este - esteMin) / (esteMax - esteMin);
       const yPercent = 1 - (norte - norteMin) / (norteMax - norteMin);
       const x = xPercent * mapaWidth;
@@ -116,14 +103,31 @@
       elem.style.top = y + "px";
     }
 
-    function atualizarPontoManual() {
-      const norte = parseFloat(document.getElementById("norte").value);
-      const este = parseFloat(document.getElementById("este").value);
-      posicionarElemento(dinamicoPonto, norte, este);
-      coordsInfo.innerText = "Ponto manual → NORTE: " + norte.toFixed(2) + ", ESTE: " + este.toFixed(2);
+    function usarGPS() {
+      if (!navigator.geolocation) {
+        info.innerText = "Este navegador não suporta GPS.";
+        return;
+      }
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const [este, norte] = proj4('WGS84', 'UTM', [lon, lat]);
+        posicionar(gpsPonto, norte, este);
+        info.innerText = "GPS → LAT: " + lat.toFixed(6) + ", LON: " + lon.toFixed(6) +
+          " → NORTE: " + norte.toFixed(2) + ", ESTE: " + este.toFixed(2);
+      }, () => {
+        info.innerText = "Erro ao acessar localização GPS.";
+      });
     }
 
-    function exibirCoordenadas(event) {
+    function atualizarManual() {
+      const norte = parseFloat(document.getElementById("norte").value);
+      const este = parseFloat(document.getElementById("este").value);
+      posicionar(manualPonto, norte, este);
+      info.innerText = "Entrada Manual → NORTE: " + norte.toFixed(2) + ", ESTE: " + este.toFixed(2);
+    }
+
+    function coordenadaClique(event) {
       const rect = event.currentTarget.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
@@ -131,48 +135,12 @@
       const norte = norteMax - (y / mapaHeight) * (norteMax - norteMin);
       document.getElementById("norte").value = norte.toFixed(2);
       document.getElementById("este").value = este.toFixed(2);
-      atualizarPontoManual();
+      atualizarManual();
     }
 
-    function latLonToUTM(lat, lon) {
-      const a = 6378137.0;
-      const f = 1 / 298.257223563;
-      const k0 = 0.9996;
-      const lonOrigin = -45;
-      const e = Math.sqrt(f * (2 - f));
-      const N = a / Math.sqrt(1 - Math.pow(e * Math.sin(lat * Math.PI / 180), 2));
-      const T = Math.pow(Math.tan(lat * Math.PI / 180), 2);
-      const C = Math.pow(e * Math.cos(lat * Math.PI / 180), 2) / (1 - Math.pow(e, 2));
-      const A = (lon - lonOrigin) * Math.PI / 180 * Math.cos(lat * Math.PI / 180);
-      const M = a * ((1 - Math.pow(e,2)/4 - 3*Math.pow(e,4)/64 - 5*Math.pow(e,6)/256) * lat * Math.PI / 180
-            - (3*Math.pow(e,2)/8 + 3*Math.pow(e,4)/32 + 45*Math.pow(e,6)/1024) * Math.sin(2 * lat * Math.PI / 180)
-            + (15*Math.pow(e,4)/256 + 45*Math.pow(e,6)/1024) * Math.sin(4 * lat * Math.PI / 180)
-            - (35*Math.pow(e,6)/3072) * Math.sin(6 * lat * Math.PI / 180));
-      const UTME = k0 * N * (A + (1 - T + C) * Math.pow(A,3)/6 + (5 - 18*T + T*T + 72*C - 58*0.00669438) * Math.pow(A,5)/120) + 500000;
-      const UTMN = k0 * (M + N * Math.tan(lat * Math.PI / 180) * (Math.pow(A,2)/2 + (5 - T + 9*C + 4*C*C) * Math.pow(A,4)/24)) - 10000000;
-      return { norte: UTMN * -1, este: UTME };
-    }
-
-    function localizarViaGPS() {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((position) => {
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
-          const utm = latLonToUTM(lat, lon);
-          posicionarElemento(gpsPonto, utm.norte, utm.este);
-          coordsInfo.innerText = "GPS → LAT: " + lat.toFixed(6) + ", LON: " + lon.toFixed(6) +
-            " → NORTE: " + utm.norte.toFixed(2) + ", ESTE: " + utm.este.toFixed(2);
-        }, () => {
-          coordsInfo.innerText = "Erro ao acessar localização GPS.";
-        });
-      } else {
-        coordsInfo.innerText = "Geolocalização não suportada neste navegador.";
-      }
-    }
-
-    window.addEventListener('load', () => {
-      atualizarPontoManual();
-      localizarViaGPS();
+    window.addEventListener("load", () => {
+      usarGPS();
+      atualizarManual();
     });
   </script>
 </body>
